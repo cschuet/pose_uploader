@@ -14,6 +14,43 @@ namespace {
 constexpr int kConnectionTimeoutInSecond = 10;
 constexpr char kReceiveGlobalSlamOptimizationsMethodName[] = "/cartographer.cloud.proto.MapBuilderService/ReceiveGlobalSlamOptimizations";
 
+class AsyncClientInterface;
+
+enum Event {
+ CONNECT,
+ READ,
+ FINISH
+};
+
+struct Tag {
+ Event event;
+ AsyncClientInterface* async_client;
+};
+
+class AsyncClientInterface {
+ public:
+  AsyncClientInterface() : connect_{CONNECT, this}, read_{READ, this}, finish_{FINISH, this} {}
+  virtual ~AsyncClientInterface() = default;
+  virtual void HandleEvent(Event event) = 0;
+ private:
+  Tag connect_;
+  Tag read_;
+  Tag finish_;
+};
+
+template <typename Req, typename Resp>
+class AsyncClient : public AsyncClientInterface {
+ public:
+    void HandleEvent(Event event) override {
+    switch(event) {
+
+    }
+    }
+
+private:
+ Resp response_;
+};
+
 void Run() {
     std::shared_ptr<::grpc::Channel> client_channel = ::grpc::CreateChannel(
             FLAGS_cartographer_server_address,
@@ -45,14 +82,16 @@ void Run() {
     client_writer->Finish(&status, finish_tag);
 
     while(true) {
-        void* got_tag;
+        void* raw;
         bool ok = false;
-        cq.Next(&got_tag, &ok);
+        cq.Next(&raw, &ok);
         if (!ok) {
           LOG(ERROR) << "Error";
           break;
         }
-        if (got_tag == connect_tag) {
+        const Tag* tag = (const Tag*)raw;
+        tag->async_client->HandleEvent(tag->event);
+        /*if (got_tag == connect_tag) {
           LOG(INFO) << "Connected.";
           client_writer->Read(&response, read_tag);
         } else if(got_tag == finish_tag) {
@@ -62,7 +101,7 @@ void Run() {
             LOG(INFO) << "Received message";
             LOG(INFO) << response.DebugString();
             client_writer->Read(&response, read_tag);
-        }
+        }*/
     }
 }
 
